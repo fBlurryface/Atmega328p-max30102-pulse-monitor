@@ -1,0 +1,19 @@
+# Altium local and generated files
+History/
+__Previews/
+Project\ Logs\ for\ */
+Project\ Outputs\ for\ */
+*.PrjPcbStructure
+*.SchDocPreview
+*.PcbDocPreview
+*.drc
+*.LOG
+*.html
+*.~*
+*.bak
+
+# OS / editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.tmp

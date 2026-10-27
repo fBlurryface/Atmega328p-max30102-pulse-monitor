@@ -1,0 +1,16 @@
+Designators,DesignQty,PopulateQty,Component,Value,Footprint,MPN,Status,Notes
+"R3,R4,R8,R9,R10,R11,R12,R13,R14",9,9,Resistor,1kOhm,R0805,,Fit,
+"R1,R5,R6,R7",4,4,Resistor,10kOhm,R0805,,Fit,
+R2,1,1,Resistor,1MOhm,R0805,,Fit,
+"C3,C4,C6,C7,C9",5,5,Ceramic Capacitor,100nF,R0805,,Fit,
+"C1,C8",2,2,Ceramic Capacitor,10uF,R0805,,Fit,
+"C2,C5",2,2,Ceramic Capacitor,22pF,R0805,,Fit,
+"S1,S2,S3,S4",4,4,SMD Tactile Switch,"6x6mm, 4-pin",Custom SMD Switch,,Fit,
+Y1,1,1,Crystal Oscillator,16MHz,49SMD,,Fit,
+U1,1,1,Microcontroller,ATmega328P-AU,LQFP32,ATMEGA328P-AU,Fit,
+CH304,1,1,USB-to-UART IC,CH340C,SO-16,CH340C,Fit,
+MAX1,1,1,Optical Sensor Module,MAX30102,Custom Module Footprint,,Fit,
+M1,1,1,OLED Display Module,"0.91in White, 4-pin I2C",HDR1X4,,Fit,
+DS1,1,1,Four-Digit Seven-Segment Display,"0.4in Red, Common Cathode",Custom Display Footprint,,Fit,
+MINI USB,1,1,Mini USB Connector,Mini USB SMD,USB-MINI3,,Fit,
+Header 1,1,0,ISP Programming Header,"2x3, 2.54mm",HDR2X3,,DNP,Programmer pins are inserted temporarily; no header soldered
