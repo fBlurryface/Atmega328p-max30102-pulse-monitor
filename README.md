@@ -2,13 +2,9 @@
 
 ## 1. Hardware Design
 
-### Schematic Design
-
-[![Circuit schematic](images/schematic-preview.png)](hardware/schematic/schematic.pdf)
-
-### PCB Layout and Routing
-
-[![PCB layout and routing](hardware/pcb/pcb-layout-black.svg)](hardware/pcb/pcb-layout.pdf)
+| Schematic Design | PCB Layout and Routing |
+|:---:|:---:|
+| [![Circuit schematic](images/schematic-preview.png)](hardware/schematic/schematic.pdf) | [![PCB layout and routing](hardware/pcb/pcb-layout-black.svg)](hardware/pcb/pcb-layout.pdf) |
 
 ## 2. PCB Fabrication and Assembly
 
@@ -19,20 +15,18 @@
 ## 3. Bootloader Programming and Bring-up
 
 <p align="center">
-  <img src="images/bootloader-flashing-success.jpg" alt="Bootloader programming with a six-pin ISP programmer" width="680">
+  <img src="images/bootloader-flashing-success.jpg" alt="Bootloader programming with a six-pin ISP programmer" width="440">
 </p>
 
 ## 4. Firmware Demonstration
 
-### Demonstration Video
-
-<!-- Insert the finished demonstration video here. -->
+<!-- Add the demonstration video here when it is available. -->
 
 ### Application Modes
 
 | RAW Mode | STATS — Measuring | STATS — Idle |
 |:---:|:---:|:---:|
-| ![RAW mode displaying sensor readings](images/operation-demo/raw-mode.jpg) | ![STATS mode displaying measurements and signal quality](images/operation-demo/stats-measuring.jpg) | ![STATS mode waiting for a finger](images/operation-demo/stats-idle.jpg) |
+| ![RAW mode displaying sensor readings](images/raw-mode.jpg) | ![STATS mode displaying measurements and signal quality](images/stats-measuring.jpg) | ![STATS mode waiting for a finger](images/stats-idle.jpg) |
 
 ## 5. Firmware Architecture
 
