@@ -12,7 +12,7 @@
 
 <p align="center">
   <a href="hardware/schematic/schematic.pdf">
-    <img src="images/schematic-preview.png" alt="Circuit schematic" width="290">
+    <img src="images/schematic-preview.png" alt="Circuit schematic" width="400">
   </a>
 </p>
 
@@ -21,7 +21,7 @@ I designed the circuit schematic in Altium Designer around the ATmega328P-AU, in
 ### PCB Layout and Routing
 
 <a href="hardware/pcb/pcb-layout.pdf">
-  <img src="hardware/pcb/pcb-layout-black.svg" alt="PCB layout and routing" align="right" width="330">
+  <img src="hardware/pcb/pcb-layout-black.svg" alt="PCB layout and routing" align="right" width="350">
 </a>
 
 I translated the schematic into a two-layer PCB in Altium Designer, completing the component placement and trace routing myself. The layout brings the MCU, optical sensor module, displays, buttons, USB-to-UART interface, and ISP connections together on one custom board.
@@ -35,8 +35,8 @@ The layout shown here is the one used for the fabricated prototype. It is a prac
 ### Fabrication and Assembly
 
 <p align="center">
-  <img src="images/pcb-bare.jpg" alt="Fabricated bare PCB" width="270">
-  <img src="images/pcb-assembled.jpg" alt="Assembled PCB before power-on" width="270">
+  <img src="images/pcb-bare.jpg" alt="Fabricated bare PCB" width="280">
+  <img src="images/pcb-assembled.jpg" alt="Assembled PCB before power-on" width="280">
 </p>
 
 I had the completed PCB layout fabricated, then populated and soldered the board to assemble the physical prototype. The photographs show the bare PCB and the assembled board before power-on.
