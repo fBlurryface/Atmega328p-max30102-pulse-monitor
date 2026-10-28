@@ -9,21 +9,17 @@
 class Measurement {
  public:
   enum class Quality : uint8_t {
-    NoFinger, Warming, Good, LowPulse, Unstable, Clipped, Uncorrelated, Range, NoBeat
+    NoFinger, Warming, Good, LowPulse, Unstable, Clipped, Uncorrelated, Range, NoBeat,
+    HighVariation
   };
   explicit Measurement(uint32_t onIR = 5000, uint32_t offIR = 3500,
                        uint32_t minimumRed = 1000)
       : onIR_(onIR), offIR_(offIR), minimumRed_(minimumRed) { reset(); }
   void reset() {
-    ticks_ = red_ = ir_ = pulses_ = 0;
+    ticks_ = red_ = ir_ = 0;
     haveSample_ = finger_ = false;
     onCount_ = offCount_ = 0;
     resetAnalysis(Quality::NoFinger);
-  }
-  bool setThresholds(uint32_t onIR, uint32_t offIR) {
-    if (!offIR || offIR >= onIR || onIR >= 260000UL) return false;
-    onIR_ = onIR; offIR_ = offIR;
-    reset(); return true;
   }
   void push(uint32_t red, uint32_t ir) {
     const uint32_t previousRed = red_, previousIR = ir_;
@@ -62,41 +58,51 @@ class Measurement {
       redCleanCount_ = 0;
       quality_ = clippedRed ? Quality::Clipped : Quality::Uncorrelated;
     } else if (redCleanCount_ < 400) ++redCleanCount_;
-    dcIR_ += (int32_t(ir << 8) - dcIR_) / 64;
+    // Two inexpensive high-pass stages suppress slow drift before peak finding.
+    // Q8 filter and envelope states preserve fractional updates on small signals.
+    dcIR_ += (int32_t(ir << 8) - dcIR_) / 32;
     const int32_t acIR = int32_t(ir) - (dcIR_ >> 8);
-    smoothIR_ += ((acIR * 256) - smoothIR_) / 4;
+    trendIR_ += (acIR * 256 - trendIR_) / 32;
+    smoothIR_ += (acIR * 256 - trendIR_ - smoothIR_) / 4;
     const int32_t signal = smoothIR_ / 256;
-    envelope_ += (int32_t(absolute(signal)) - envelope_) / 32;
+    envelope_ += (int32_t(absolute(signal) * 256UL) - envelope_) / 32;
     if (uint32_t(ticks_ - analysisStarted_) < 100) return;
-    const int32_t minimum = int32_t(greater(ir / 1000, 8UL));
-    const int32_t threshold = envelope_ * 3 / 5 > minimum ? envelope_ * 3 / 5 : minimum;
-    if (absolute(signal) < uint32_t(minimum)) {
-      if (lowCount_ < 50) ++lowCount_;
-      if (lowCount_ == 50) {
+    const int32_t minimum = int32_t(greater(ir / 2000, 10UL));
+    const int32_t threshold = pulseThreshold();
+    // A quiet portion of one cardiac cycle must not erase the interval history.
+    if (envelope_ / 256 < minimum * 2 / 3) {
+      if (lowCount_ < 100) ++lowCount_;
+      if (lowCount_ == 100) {
         timingValid_ = spo2Valid_ = false;
         intervalCount_ = intervalWrite_ = 0;
         spo2Count_ = spo2Write_ = 0;
         quality_ = Quality::LowPulse;
       }
     } else lowCount_ = 0;
-    if (signal < -threshold / 2 && !candidate_) armed_ = true;
-    if (armed_ && !candidate_ && signal > threshold) {
-      candidate_ = true; armed_ = false;
-      peak_ = signal; peakTick_ = ticks_; falls_ = 0;
+    // Track local prominence instead of requiring a negative-to-positive crossing.
+    if (!candidate_) {
+      if (signal < valley_) valley_ = signal;
+      if (signal - valley_ >= threshold) {
+        candidate_ = true; peak_ = signal; peakTick_ = ticks_; falls_ = 0;
+      }
     }
     if (candidate_) {
       if (signal > peak_) {
         peak_ = signal; peakTick_ = ticks_; falls_ = 0;
-      } else if (signal < peak_ - peak_ / 16) {
-        if (++falls_ >= 3) {
-          candidate_ = false;
-          if (peak_ >= minimum && uint32_t(peak_) < ir / 5) acceptPeak(peakTick_);
+      } else if (peak_ - signal >= threshold / 2) {
+        if (++falls_ >= 2) {
+          candidate_ = false; valley_ = signal;
+          if (uint32_t(absolute(peak_)) < ir / 5) acceptPeak(peakTick_);
         }
       } else falls_ = 0;
     }
-    if (havePeak_ && uint32_t(ticks_ - lastPeak_) > 250) {
+    if (havePeak_ && uint32_t(ticks_ - lastPeak_) > 280) {
       havePeak_ = timingValid_ = spo2Valid_ = false;
       intervalCount_ = intervalWrite_ = 0;
+      spo2Count_ = spo2Write_ = 0; quality_ = Quality::NoBeat;
+    }
+    if (timingValid_ && !freshTiming()) {
+      timingValid_ = spo2Valid_ = false;
       spo2Count_ = spo2Write_ = 0; quality_ = Quality::NoBeat;
     }
     sumRed_ += red; sumIR_ += ir;
@@ -119,90 +125,141 @@ class Measurement {
   bool takeBeat() { const bool value = beat_; beat_ = false; return value; }
   bool hasSample() const { return haveSample_; }
   bool finger() const { return finger_; }
-  bool hrValid() const { return timingValid_ && (!periodicKnown_ || periodicValid_); }
+  bool hrValid() const { return timingValid_ && freshTiming(); }
   bool spo2Valid() const { return spo2Valid_; }
   uint16_t bpm() const { return bpm_; }
   uint16_t spo2x10() const { return spo2_; }
   uint32_t red() const { return red_; }
   uint32_t ir() const { return ir_; }
-  uint32_t samples() const { return ticks_; }
-  uint32_t pulses() const { return pulses_; }
-  uint32_t onThreshold() const { return onIR_; }
-  uint32_t offThreshold() const { return offIR_; }
-  uint16_t ratiox1000() const { return ratio_; }
-  int16_t correlationx1000() const { return correlation_; }
-  int16_t periodicityx1000() const { return periodicity_; }
-  uint16_t perfusionx10000() const { return perfusion_; }
-  uint8_t windowSamples() const { return count_; }
   Quality quality() const { return quality_; }
 
  private:
   uint32_t onIR_, offIR_, minimumRed_;
   uint16_t redWindow_[100], irWindow_[100]; // 400 bytes, no intermediate arrays.
-  uint16_t intervals_[4], spo2History_[3];
-  uint32_t ticks_, red_, ir_, pulses_, analysisStarted_, lastPeak_, peakTick_;
+  uint16_t intervals_[4], cadence_[3], spo2History_[3];
+  uint32_t ticks_, red_, ir_;
+  uint32_t analysisStarted_, lastPeak_, peakTick_, lastCandidate_, lastGood_;
   uint32_t sumRed_, sumIR_;
-  int32_t dcIR_, smoothIR_, envelope_, peak_;
-  uint16_t bpm_, spo2_, ratio_, perfusion_, redCleanCount_;
-  int16_t correlation_, periodicity_;
+  int32_t dcIR_, trendIR_, smoothIR_, envelope_, peak_, valley_;
+  uint16_t bpm_, periodQ8_, spo2_, redCleanCount_;
   uint8_t onCount_, offCount_, write_, count_, sinceWindow_, decimation_;
   uint8_t intervalCount_, intervalWrite_, spo2Count_, spo2Write_, falls_, lowCount_;
-  bool haveSample_, finger_, havePeak_, timingValid_, spo2Valid_, armed_, candidate_;
-  bool beat_, pending_, periodicKnown_, periodicValid_;
+  uint8_t fastCount_, cadenceCount_, cadenceWrite_;
+  bool haveSample_, finger_, havePeak_, timingValid_, spo2Valid_, candidate_;
+  bool beat_, pending_;
   Quality quality_;
   static uint32_t absolute(int32_t value) { return value < 0 ? uint32_t(-value) : uint32_t(value); }
   static uint32_t greater(uint32_t a, uint32_t b) { return a > b ? a : b; }
+  int32_t pulseThreshold() const {
+    const int32_t floor = int32_t(greater(ir_ / 2000, 10UL));
+    const int32_t adaptive = (envelope_ / 256) * 3 / 2;
+    return adaptive > floor ? adaptive : floor;
+  }
   void resetAnalysis(Quality quality) {
     analysisStarted_ = ticks_;
     dcIR_ = int32_t(ir_ << 8);
-    smoothIR_ = envelope_ = peak_ = 0;
+    trendIR_ = smoothIR_ = envelope_ = peak_ = valley_ = 0;
     lastPeak_ = peakTick_ = sumRed_ = sumIR_ = 0;
-    bpm_ = spo2_ = ratio_ = perfusion_ = redCleanCount_ = 0; correlation_ = periodicity_ = 0;
+    bpm_ = periodQ8_ = spo2_ = redCleanCount_ = 0;
     write_ = count_ = sinceWindow_ = decimation_ = 0;
     intervalCount_ = intervalWrite_ = spo2Count_ = spo2Write_ = falls_ = lowCount_ = 0;
-    havePeak_ = timingValid_ = spo2Valid_ = armed_ = candidate_ = beat_ = pending_ = false;
-    periodicKnown_ = periodicValid_ = false;
+    lastCandidate_ = lastGood_ = 0; fastCount_ = cadenceCount_ = cadenceWrite_ = 0;
+    havePeak_ = timingValid_ = spo2Valid_ = candidate_ = beat_ = pending_ = false;
     quality_ = quality;
   }
-  uint16_t averageInterval() const {
+  uint16_t medianInterval() const {
     if (!intervalCount_) return 0;
-    uint16_t sum = 0;
-    for (uint8_t i = 0; i < intervalCount_; ++i) sum += intervals_[i];
-    return (sum + intervalCount_ / 2) / intervalCount_;
+    uint16_t sorted[4];
+    for (uint8_t i = 0; i < intervalCount_; ++i) {
+      uint8_t j = i;
+      while (j && sorted[j - 1] > intervals_[i]) { sorted[j] = sorted[j - 1]; --j; }
+      sorted[j] = intervals_[i];
+    }
+    const uint8_t middle = intervalCount_ / 2;
+    return intervalCount_ & 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+  }
+  uint16_t averageInterval() const {
+    const uint16_t center = medianInterval();
+    uint16_t sum = 0; uint8_t n = 0;
+    for (uint8_t i = 0; i < intervalCount_; ++i) {
+      if (absolute(int32_t(intervals_[i]) - center) <= uint32_t(center / 4 + 3)) {
+        sum += intervals_[i]; ++n;
+      }
+    }
+    return n ? (sum + n / 2) / n : center;
+  }
+  bool freshTiming() const {
+    const uint16_t period = averageInterval();
+    const uint16_t timeout = period * 2 + 10 > 120 ? period * 2 + 10 : 120;
+    return uint32_t(ticks_ - lastGood_) <= timeout;
   }
   void acceptPeak(uint32_t tick) {
-    if (!havePeak_) { havePeak_ = true; lastPeak_ = tick; return; }
-    const uint32_t gap = tick - lastPeak_;
-    if (gap < 28) { // Reject fast candidates without counting every other pulse.
-      lastPeak_ = tick;
+    const uint32_t rawGap = tick - lastCandidate_;
+    if (lastCandidate_ && rawGap >= 28 && rawGap <= 171) {
+      cadence_[cadenceWrite_] = uint16_t(rawGap);
+      cadenceWrite_ = (cadenceWrite_ + 1) % 3;
+      if (cadenceCount_ < 3) ++cadenceCount_;
+    } else cadenceCount_ = cadenceWrite_ = 0;
+    if (lastCandidate_ && rawGap < 28) {
+      if (fastCount_ < 3) ++fastCount_;
+    } else fastCount_ = 0;
+    lastCandidate_ = tick;
+    if (fastCount_ >= 3) {
+      timingValid_ = spo2Valid_ = false;
       intervalCount_ = intervalWrite_ = 0;
-      spo2Count_ = spo2Write_ = 0;
-      timingValid_ = spo2Valid_ = false; quality_ = Quality::Unstable;
-      return;
+      spo2Count_ = spo2Write_ = 0; havePeak_ = false;
+      quality_ = Quality::Unstable; return;
+    }
+    if (!havePeak_) { havePeak_ = true; lastPeak_ = tick; return; }
+    uint32_t gap = tick - lastPeak_;
+    const uint16_t previous = averageInterval();
+    bool rebased = false;
+    // Ignore a close secondary peak without moving the trusted timing anchor.
+    if (gap < 28) { return; }
+    if (intervalCount_ >= 3 && gap * 5 < uint32_t(previous) * 3) {
+      // A sustained faster cadence must be able to replace the old rate.
+      // Use three measured candidate intervals, not synthetic divided intervals.
+      bool newCadence = cadenceCount_ == 3;
+      if (newCadence) {
+        const uint16_t center = (cadence_[0] + cadence_[1] + cadence_[2] + 1) / 3;
+        for (uint8_t i = 0; i < 3; ++i)
+          if (absolute(int32_t(cadence_[i]) - center) > uint32_t(center / 8 + 3)) newCadence = false;
+      }
+      if (!newCadence) { return; }
+      for (uint8_t i = 0; i < 3; ++i) intervals_[i] = cadence_[i];
+      intervalCount_ = 3; intervalWrite_ = 3; timingValid_ = false;
+      spo2Valid_ = false; spo2Count_ = spo2Write_ = 0; rebased = true;
+      gap = rawGap;
     }
     lastPeak_ = tick;
     if (gap > 171) {
-      intervalCount_ = intervalWrite_ = 0;
-      spo2Count_ = spo2Write_ = 0; timingValid_ = spo2Valid_ = false;
+      spo2Valid_ = false;
+      spo2Count_ = spo2Write_ = 0;
       quality_ = Quality::NoBeat; return;
     }
-    const uint16_t mean = averageInterval();
-    if (intervalCount_ && absolute(int32_t(gap) - mean) > uint32_t(mean / 4 + 2)) {
-      intervalCount_ = intervalWrite_ = 0;
-      timingValid_ = spo2Valid_ = false;
-      spo2Count_ = spo2Write_ = 0;
-      quality_ = Quality::Unstable;
-      return;
+    if (!rebased) {
+      intervals_[intervalWrite_] = uint16_t(gap);
+      intervalWrite_ = (intervalWrite_ + 1) & 3;
+      if (intervalCount_ < 4) ++intervalCount_;
     }
-    intervals_[intervalWrite_] = uint16_t(gap);
-    intervalWrite_ = (intervalWrite_ + 1) & 3;
-    if (intervalCount_ < 4) ++intervalCount_;
-    timingValid_ = intervalCount_ >= 3;
     const uint16_t period = averageInterval();
-    bpm_ = (6000UL + period / 2) / period;
-    beat_ = !periodicKnown_ || periodicValid_;
-    if (beat_) ++pulses_;
-    if (timingValid_ && (!periodicKnown_ || periodicValid_) &&
+    uint8_t coherent = 0;
+    for (uint8_t i = 0; i < intervalCount_; ++i)
+      if (absolute(int32_t(intervals_[i]) - period) <= uint32_t(period / 4 + 3)) ++coherent;
+    const bool currentGood = absolute(int32_t(gap) - period) <= uint32_t(period / 4 + 3);
+    if (currentGood && coherent >= 3) {
+      const uint16_t target = uint16_t(uint32_t(period) * 256UL);
+      if (!hrValid()) periodQ8_ = target;
+      else periodQ8_ = uint16_t(int32_t(periodQ8_) + (int32_t(target) - periodQ8_) / 4);
+      bpm_ = uint16_t((1536000UL + periodQ8_ / 2) / periodQ8_);
+      timingValid_ = true; lastGood_ = ticks_;
+    } else if (!currentGood) {
+      spo2Valid_ = false;
+      spo2Count_ = spo2Write_ = 0; quality_ = Quality::Unstable;
+    }
+    // Single-pulse feedback is independent of the SpO2 window's validity.
+    if (currentGood && coherent >= 2) { beat_ = true; }
+    if (hrValid() &&
         (quality_ == Quality::Warming || quality_ == Quality::LowPulse || quality_ == Quality::NoBeat))
       quality_ = Quality::Good;
   }
@@ -235,7 +292,6 @@ class Measurement {
     uint32_t sumR = 0, sumI = 0;
     int32_t trendR = 0, trendI = 0;
     bool redClipped = false;
-    correlation_ = 0; ratio_ = 0;
     for (uint8_t i = 0; i < 100; ++i) {
       const int16_t t = int16_t(2 * i) - 99;
       const uint16_t r = valueAt(redWindow_, i), ir = valueAt(irWindow_, i);
@@ -253,26 +309,20 @@ class Measurement {
       r2 += r * r; i2 += ir * ir; cross += r * ir;
     }
     if (!(dcI > 0 && i2 > 0)) {
-      periodicKnown_ = true; periodicValid_ = false;
       rejectWindow(Quality::LowPulse); return;
     }
     const float piI = sqrtf(i2 / 100.0f) / dcI;
     if (!(piI >= 0.001f && piI <= 0.10f)) {
-      periodicKnown_ = true; periodicValid_ = false;
-      rejectWindow(Quality::LowPulse); return;
+      rejectWindow(piI > 0.10f ? Quality::HighVariation : Quality::LowPulse); return;
     }
-    perfusion_ = uint16_t(piI * 10000.0f);
-    if (!timingValid_) { rejectWindow(Quality::NoBeat); return; }
+    if (!hrValid()) { rejectWindow(Quality::NoBeat); return; }
     const float periodScore = periodicity(dcI, slopeI);
-    periodicity_ = int16_t(periodScore * 1000.0f);
-    periodicKnown_ = true; periodicValid_ = periodScore >= 0.65f;
-    if (!periodicValid_) { rejectWindow(Quality::Unstable); return; }
+    if (!(periodScore >= 0.65f)) { rejectWindow(Quality::Unstable); return; }
     if (redClipped) { rejectWindow(Quality::Clipped); return; }
     if (redCleanCount_ < 400) { rejectWindow(Quality::Uncorrelated); return; }
     if (!(dcR >= minimumRed_ / 4.0f && r2 > 0)) { rejectWindow(Quality::Uncorrelated); return; }
     const float piR = sqrtf(r2 / 100.0f) / dcR;
     const float corr = cross / sqrtf(r2 * i2);
-    correlation_ = int16_t(corr * 1000.0f);
     if (fabsf(slopeI * 198.0f) > dcI * 0.10f || fabsf(slopeR * 198.0f) > dcR * 0.10f) {
       rejectWindow(Quality::Unstable); return;
     }
@@ -281,7 +331,6 @@ class Measurement {
     }
     const float ratio = piR / piI;
     if (!(ratio > 0.02f && ratio < 1.84f)) { rejectWindow(Quality::Range); return; }
-    ratio_ = uint16_t(ratio * 1000.0f);
     const float estimate = (-45.060f * ratio + 30.354f) * ratio + 94.845f;
     if (!(estimate >= 70.0f && estimate <= 100.0f)) {
       rejectWindow(Quality::Range); return;

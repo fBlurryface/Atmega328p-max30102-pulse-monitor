@@ -1,6 +1,6 @@
 # Firmware Overview
 
-This document describes the firmware developed for the custom ATmega328P-AU board. It focuses on the connection between the schematic and the code, the use of a separate hardware-debugging program, and the behaviour of the main application. The goal is to demonstrate practical **board bring-up and embedded firmware integration**, rather than a general-purpose software framework.
+This document describes the firmware developed for the custom ATmega328P-AU board. It focuses on the connection between the schematic and the code, the use of a separate hardware-debugging program, and the behaviour of the main application. The goal is to demonstrate practical **board bring-up, signal processing and embedded firmware integration**, rather than a general-purpose software framework.
 
 The underlying circuit is covered in [Hardware Design Notes](design-notes.md). Initial ISP Bootloader programming is documented separately in [Bootloader Programming Setup](programming-setup.md).
 
@@ -27,7 +27,7 @@ The mapping in `BoardConfig.h` follows the custom PCB schematic rather than the 
 | Seven-segment lines a–g | PD2–PD7, PB0 | D2–D8 | Segment outputs; HIGH turns a segment on. |
 | Digit selects DIG1–DIG4 | PB2–PB5 | D10–D13 | Active-low selection for four-digit multiplexing. |
 | MAX30102 and OLED SDA / SCL | PC4 / PC5 | A4 / A5 (`Wire`) | Shared 100 kHz I²C bus. |
-| CH340C serial connection | PD0 / PD1 | D0 (RX) / D1 (TX) | Firmware upload through the Bootloader and runtime serial commands. |
+| CH340C serial connection | PD0 / PD1 | D0 (RX) / D1 (TX) | Sketch upload through the Bootloader; interactive serial commands are provided by the separate debug sketch. |
 | S1 reset button | PC6 / RESET | RESET | Hardware reset; not an application input. |
 
 The MAX30102 uses I²C address **0x57**; the 128×32 SSD1306 OLED uses **0x3C** on this board. The seven-segment display is driven directly by GPIO and scanned using **Timer2**: a 1 kHz scan schedule gives each digit a 250 Hz refresh rate. Timer2 is therefore reserved for the display and should not be reassigned to another timing library without revisiting the driver.
@@ -80,13 +80,15 @@ The MAX30102 is configured to provide paired **18-bit red and infrared (IR) ADC 
 
 **Finger detection.** The IR channel is used to decide whether a finger is present. By default, 20 consecutive samples at or above an IR threshold of **5000** are required to enter measurement, while 30 consecutive samples below **3500** indicate removal. This hysteresis reduces repeated state changes around a single threshold; the defaults are starting values, not thresholds calibrated for every physical setup.
 
-**Heart rate (BPM).** A slowly varying IR baseline is removed and the remaining pulsatile component is smoothed. An adaptive threshold detects candidate pulse peaks. For valid consecutive peaks, the firmware estimates the interval in 100 Hz sample ticks, rejects inconsistent or implausible intervals, and averages up to four accepted intervals. The conversion is:
+**Heart rate (BPM).** The streaming IR detector tracks and removes the slowly varying DC baseline, then subtracts a slower trend before smoothing the remaining pulsatile component. These inexpensive filter stages help separate heartbeat-related variation from gradual drift in the optical signal. A fixed-point (Q8) amplitude envelope supplies an adaptive detection threshold. The detector tracks local valleys and identifies candidate peaks from their **prominence above the preceding valley**.
+
+Candidate peak intervals are measured in raw 100 Hz sample ticks. Very short secondary peaks are ignored without moving the trusted timing anchor. Up to four intervals are retained; a median-centred average reduces the influence of isolated outliers. At least three mutually consistent intervals are required to establish a valid heart rate. The firmware also checks how recently a trustworthy interval was observed, and can adopt a substantially faster rhythm when three consecutive candidate intervals support the new cadence. To reduce abrupt displayed changes, the accepted period is smoothed before conversion to BPM:
 
 $$
-\mathrm{BPM} \approx \frac{60f_s}{\overline{N}} = \frac{6000}{\overline{N}}, \qquad f_s = 100\ \mathrm{Hz}
+\mathrm{BPM} \approx \frac{60f_s}{\widehat{N}} = \frac{6000}{\widehat{N}}, \qquad f_s = 100\ \mathrm{Hz}
 $$
 
-Here `N` is the number of raw sample intervals between successive accepted pulse peaks. At least three accepted intervals are required before BPM is reported; a periodicity check against the rolling IR window further screens unstable signals. The BPM result appears on the four-digit display in STATS mode and as text on the OLED.
+Here \(\widehat{N}\) is the **smoothed estimate of the accepted inter-peak interval**, in 100 Hz sample ticks. Existing valid estimates are updated by moving approximately one-quarter of the way towards the newly accepted period; a newly established rhythm starts from its current period. Heart-rate validity is based on consistent, recent peak timing. The separate four-second IR periodicity check described below is used when accepting an SpO₂ estimate, **not as a prerequisite for displaying an otherwise valid BPM**. BPM appears on the four-digit display in STATS mode and as text on the OLED.
 
 **SpO₂ engineering estimate.** Every four red/IR sample pairs are averaged into a compact **25 Hz** record. The firmware retains **100 16-bit records per channel**, representing a rolling **four-second window** in **400 bytes** of sample storage. For each channel, it computes the mean (DC component), removes the mean and linear trend, then finds the root-mean-square amplitude of the remaining AC component. Their normalised ratio is:
 
@@ -100,17 +102,17 @@ $$
 \mathrm{SpO}_{2,\mathrm{EST}}(\%) = -45.060R^2 + 30.354R + 94.845
 $$
 
-The estimate is updated from the rolling window approximately once per second and smoothed over up to three accepted estimates before being displayed as a whole percentage. The code also checks pulse strength, saturation, red/IR correlation, IR periodicity, abrupt changes and the permitted ratio/output ranges. Estimates outside **70–100%** are rejected rather than clamped into that range. If an estimate fails these checks, the display shows `SpO2 EST: --%` instead of an arbitrary percentage. Heart rate and SpO₂ have **separate validity flags**, so a usable BPM does not automatically imply a usable SpO₂ estimate.
+The estimate is updated from the rolling window approximately once per second. With one accepted estimate the value is shown directly; with two it uses their mean, and with three it uses their median to reduce isolated changes. The code also checks pulse strength, excessive optical variation, saturation, red/IR correlation, IR periodicity, abrupt changes and the permitted ratio/output ranges. Estimates outside **70–100%** are rejected rather than clamped into that range. If an estimate fails these checks, the display shows `SpO2 EST: --%` instead of an arbitrary percentage. Heart rate and SpO₂ have **separate validity flags**, so a usable BPM does not automatically imply a usable SpO₂ estimate.
 
 ### 4.3 Implementation Choices and Attribution
 
-The implementation also uses fixed-size buffers, non-blocking display scheduling and a small OLED text renderer instead of a full-screen framebuffer. These are practical choices for the ATmega328P's limited RAM.
+The implementation also uses fixed-size buffers, non-blocking display scheduling and a small OLED text renderer instead of a full-screen framebuffer. These are practical choices for the ATmega328P's limited RAM. The main sketch is operated through the physical buttons and displays and does not use a runtime serial console. The independently uploadable **debug sketch** provides interactive serial commands for peripheral inspection.
 
 The project-specific streaming peak detector, compact optical window and application state management are implemented in [`Measurement.h`](../firmware/main/Measurement.h). The **detrended RMS red/IR ratio approach and SpO₂ reference polynomial** were adapted from Robert Fraczkiewicz's [MAX30102_by_RF algorithm](https://github.com/aromring/MAX30102_by_RF/blob/master/algorithm_by_RF.cpp), which is distributed under the **MIT licence**. This is not a full port of that algorithm; in particular, the project's BPM calculation uses its own streaming peak-timing approach. The OLED's ASCII font subset was adapted from [Adafruit GFX](https://github.com/adafruit/Adafruit-GFX-Library/blob/master/glcdfont.c) under a **BSD licence**. The relevant notices and source details are retained in [`THIRD_PARTY_LICENSES.txt`](../firmware/THIRD_PARTY_LICENSES.txt).
 
 **The reference polynomial is not a calibration of this board.** Its coefficients were not fitted against reference measurements for the actual MAX30102 module and optical arrangement. Analog Devices also notes that SpO₂ mapping depends on the optical design and requires calibration; see its [SpO₂ measurement guidelines](https://www.analog.com/en/resources/technical-articles/guidelines-for-spo2-measurement--maxim-integrated.html). Therefore `SpO2 EST` is a demonstration of signal processing, **not a validated physiological reading**.
 
-For optional runtime inspection, the main sketch also accepts serial commands such as `help`, `status`, `mode raw`, `mode stats`, `reset`, `stream on` and `params` at **115200 baud**. The serial interface supplements the physical controls; it is not required for normal application startup.
+For interactive hardware diagnostics, upload the separate [debug sketch](../firmware/debug/debug.ino) and follow its [command reference](../firmware/debug/README.md). The debug and main sketches do not run simultaneously.
 
 ## 5. Build and Upload
 
@@ -120,7 +122,7 @@ With a compatible Bootloader already installed, the intended firmware upload pat
 2. Open the matching `main.ino` or `debug.ino` in Arduino IDE.
 3. Select an **ATmega328P, 16 MHz** Arduino AVR target and the board/processor settings appropriate for the Bootloader already present on the MCU. Select the serial port exposed through the CH340C.
 4. Compile and upload the selected sketch. Only one of the two sketches will reside in the MCU application area at a time.
-5. If using the serial console, set **115200 baud** and a newline-compatible line ending. Opening the port may trigger the board's DTR auto-reset circuit.
+5. When running the **debug sketch**, open its serial console at **115200 baud** with a newline-compatible line ending. The main sketch uses the board buttons and displays instead of serial commands. Opening the serial port may trigger the board's DTR auto-reset circuit.
 
 The exact original Bootloader and fuse configuration were not recorded, so this note does not prescribe a universal Uno/Nano processor-menu choice or require burning a new Bootloader. Refer to [programming-setup.md](programming-setup.md) for the documented ISP procedure.
 
@@ -129,7 +131,8 @@ The exact original Bootloader and fuse configuration were not recorded, so this 
 This is a **prototype firmware implementation**, not a medically validated measurement instrument. In particular:
 
 - The `SpO2 EST` output is an **uncalibrated engineering estimate**. Its numeric value must not be treated as an accurate blood-oxygen measurement or used for health decisions.
-- Earlier hardware tests established basic peripheral operation, but the complete v0.3.0 application—including real-signal heart-rate behaviour, optical thresholds, sustained sampling and estimation accuracy—still requires validation on the assembled board.
+- On-board tests established basic peripheral operation and exercised the integrated main application, including optical signal recognition and display behaviour. These observations support functional integration but do not establish quantified measurement accuracy or reliability.
+- The detector includes measures to reject noisy or inconsistent pulse candidates, but sustained operation, behaviour across users and optical conditions, and agreement with a reference instrument have not been systematically characterised.
 - The current display, GPIO and signal-processing choices are specific to this PCB. They are not presented as a portable driver framework or a production-ready design.
 
 The firmware's role in this repository is to document the progression from **hardware bring-up** to an integrated embedded application, while keeping those verification limits explicit.

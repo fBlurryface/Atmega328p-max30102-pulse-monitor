@@ -22,7 +22,7 @@ constexpr uint16_t KEY_DEBOUNCE_MS = 25;
 constexpr uint16_t KEY_LONG_MS = 800;
 // User verified the 0.91-inch SSD1306 128x32 white OLED at 0x3C on hardware.
 constexpr uint8_t OLED_ADDRESS = 0x3C;
-// Initial presence thresholds; tune from RAW readings on the physical module.
+// Default finger-presence thresholds in raw ADC counts.
 constexpr uint32_t FINGER_ON_IR = 5000;
 constexpr uint32_t FINGER_OFF_IR = 3500;
 constexpr uint32_t MINIMUM_RED = 1000;

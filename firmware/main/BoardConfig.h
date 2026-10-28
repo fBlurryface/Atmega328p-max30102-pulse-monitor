@@ -11,7 +11,6 @@
 #endif
 
 namespace Board {
-constexpr uint32_t SERIAL_BAUD = 115200UL;
 constexpr uint32_t I2C_HZ = 100000UL;
 constexpr uint32_t I2C_TIMEOUT_US = 25000UL;
 constexpr uint8_t KEY_PINS[3] = {A1, A2, A3}; // S2=PC1, S3=PC2, S4=PC3.
@@ -22,7 +21,7 @@ constexpr uint16_t KEY_DEBOUNCE_MS = 25;
 constexpr uint16_t KEY_LONG_MS = 800;
 // User verified the 0.91-inch SSD1306 128x32 white OLED at 0x3C on hardware.
 constexpr uint8_t OLED_ADDRESS = 0x3C;
-// Initial presence thresholds; tune from RAW readings on the physical module.
+// Default finger-presence thresholds in raw ADC counts.
 constexpr uint32_t FINGER_ON_IR = 5000;
 constexpr uint32_t FINGER_OFF_IR = 3500;
 constexpr uint32_t MINIMUM_RED = 1000;

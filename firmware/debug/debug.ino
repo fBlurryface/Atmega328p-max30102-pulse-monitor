@@ -1,5 +1,5 @@
 /*
- * Hardware debug console, v0.2.1
+ * Hardware debug console.
  * Open debug/debug.ino in Arduino IDE; keep the complete debug sketch folder.
  * Keep the board/processor/upload settings that already work with your bootloader.
  * Serial Monitor: 115200 baud, Newline or Both NL & CR; type help.
@@ -159,7 +159,7 @@ void onCommand(char *line) {
   if (EQ(args[0], "help") && n == 1) { printHelp(); return; }
   if (EQ(args[0], "pins") && n == 1) { printPins(); return; }
   if (EQ(args[0], "status") && n == 1) {
-    Serial.print(F("Board console v0.2.1 uptime_ms=")); Serial.println(millis());
+    Serial.print(F("Board console uptime_ms=")); Serial.println(millis());
     Serial.print(F("Key events=")); Serial.print(keyEvents ? 1 : 0);
     Serial.print(F(" queue_drops=")); Serial.println(buttons.droppedEvents());
     Serial.print(F("Segment enabled=")); Serial.print(segment4.enabled() ? 1 : 0);
@@ -377,7 +377,7 @@ void setup() {
   buttons.begin();
   segment4.begin(); // Starts blank; no autonomous test or sensor LED activation.
   bus.begin(Board::I2C_HZ, Board::I2C_TIMEOUT_US);
-  Serial.println(F("\nBoard peripheral console v0.2.1; 115200 baud; type help"));
+  Serial.println(F("\nBoard peripheral console; 115200 baud; type help"));
   Serial.println(F("Keys active; segment blank; MAX stopped; OLED idle (use oled begin)."));
 }
 
