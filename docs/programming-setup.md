@@ -2,7 +2,7 @@
 
 This note records the **initial Bootloader programming procedure actually used** for the custom ATmega328P-AU PCB. It covers the external programmer, the temporary ISP connection, and the programmer's LED feedback. It is not a general tutorial for all AVR programmers.
 
-For the circuit design of the ISP and USB-to-UART interfaces, see the [Hardware Design Notes](design-notes.md). Firmware source code, peripheral tests, and application behaviour are reserved for the [Firmware README](../firmware/README.md), which will be completed alongside the firmware documentation.
+For the circuit design of the ISP and USB-to-UART interfaces, see the [Hardware Design Notes](design-notes.md). Firmware structure, peripheral bring-up, application behaviour, and serial uploading are described in the [Firmware Overview](firmware-overview.md).
 
 ## 1. Overview
 
@@ -50,4 +50,4 @@ The programmer's **steady green LED** was the success indication used for Bootlo
 
 This LED indication is the programmer's reported result; it is not a separate software readback log or a complete test of subsequent serial uploads. With a compatible Bootloader installed, the intended next step is firmware development through the board's **Mini USB → CH340C → ATmega328P UART** path.
 
-Details of peripheral drivers, the hardware-test entry point, the application entry point, and the actual build/upload procedure belong in the [Firmware README](../firmware/README.md).
+Details of peripheral drivers, the hardware-debug sketch, the main application, and the Arduino build/upload procedure are covered in the [Firmware Overview](firmware-overview.md).
