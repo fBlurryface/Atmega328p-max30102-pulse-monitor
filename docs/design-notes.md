@@ -37,7 +37,7 @@ The CH340C provides a USB serial interface but does **not** itself program a bla
 
 The **MAX30102 sensor module** and **0.91-inch OLED module** share the same I²C **SDA** and **SCL** nets from the MCU. Using a common bus limits the number of GPIO signals needed for these two peripherals.
 
-Both module connectors are connected to the board's 5 V and ground nets in the schematic. Because these are **modules** rather than bare MAX30102 and OLED controller ICs, their on-board regulation, I²C pull-ups, and logic-level compatibility must be checked against the particular assembled modules. The main-board schematic does not show separate I²C pull-up resistors.
+Both module connectors are connected to the board's 5 V and ground nets in the schematic. Because these are **modules** rather than bare MAX30102 and OLED controller ICs, their on-board regulation, I²C pull-ups, and logic-level compatibility must be checked against the particular assembled modules. The main-board schematic does not arrange separate I²C pull-up resistors.
 
 ### 2.4 Display and User Inputs
 
