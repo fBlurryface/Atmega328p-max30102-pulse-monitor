@@ -2,13 +2,11 @@
 
 ## Demonstration Video
 
-<p align="center">
-  <video
-    src="https://github.com/user-attachments/assets/f70d3435-f54f-49b9-8b4e-e0606775f0d9"
-    controls
-    width="520">
-  </video>
-</p>
+<details>
+<summary><strong>▶ Watch the hardware demonstration (41 seconds)
+</strong></summary>
+https://github.com/user-attachments/assets/f70d3435-f54f-49b9-8b4e-e0606775f0d9
+</details>
 
 ## 1. Hardware Design
 
