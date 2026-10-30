@@ -2,7 +2,13 @@
 
 ## Demonstration Video
 
-https://github.com/user-attachments/assets/f70d3435-f54f-49b9-8b4e-e0606775f0d9
+<p align="center">
+  <video
+    src="https://github.com/user-attachments/assets/f70d3435-f54f-49b9-8b4e-e0606775f0d9"
+    controls
+    width="520">
+  </video>
+</p>
 
 ## 1. Hardware Design
 
