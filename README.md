@@ -2,9 +2,7 @@
 
 ## Demonstration Video
 
-*A video demonstration will be added here.*
-
-<!-- Replace the line above with a GitHub-hosted user-attachments video URL on its own line. -->
+https://github.com/user-attachments/assets/fb5ad47c-a759-4196-a2f8-79d6ea022e3f
 
 ## 1. Hardware Design
 
