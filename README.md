@@ -3,7 +3,7 @@
 ## Demonstration Video
 
 <details>
-<summary><strong>▶ Watch the hardware demonstration (41 seconds)</strong></summary><video
+<summary><strong>🎬 Click to expand and watch the hardware demonstration (41 seconds)</strong></summary><video
   src="https://github.com/user-attachments/assets/f70d3435-f54f-49b9-8b4e-e0606775f0d9"
   controls
   width="480">
